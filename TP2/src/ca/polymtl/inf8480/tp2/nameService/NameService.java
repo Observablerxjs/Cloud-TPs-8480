@@ -22,6 +22,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.nio.file.StandardCopyOption;
 
+import java.io.FileReader;
+import java.io.BufferedReader;
+
 
 import ca.polymtl.inf8480.tp2.shared.NameServiceInterface;
 // import ca.polymtl.inf8480.tp1.shared.AuthServerInterface;
@@ -47,13 +50,25 @@ public class NameService implements NameServiceInterface {
 			System.setSecurityManager(new SecurityManager());
 		}
 		try {
-			NameServiceInterface stub = (NameServiceInterface) UnicastRemoteObject
-					.exportObject(this, 0);
 
-			Registry registry = LocateRegistry.getRegistry();
+			BufferedReader br = new BufferedReader(new FileReader("config/config_nameService"));
+			String line;
+    		while ((line = br.readLine()) != null) {
+			   String[] words = line.split(": ");
+			   if(words[0].equals("IPaddress")){
+				   System.out.println(words[1]);
+				System.setProperty("java.rmi.server.hostname",words[1]);
+			   }
+			}
+			br.close();
+
+
+			NameServiceInterface stub = (NameServiceInterface) UnicastRemoteObject
+					.exportObject(this, 5000);
+			Registry registry = LocateRegistry.createRegistry(5000);
+			// Registry registry = LocateRegistry.getRegistry(port);
 			registry.rebind("nameService", stub);
 			System.out.println("Server ready.");
-			System.out.println("Make sure you launched AuthServer before the files Server.");			
 		} catch (ConnectException e) {
 			System.err
 					.println("Name_Service: Impossible de se connecter au registre RMI. Est-ce que rmiregistry est lancé ?");
@@ -63,6 +78,15 @@ public class NameService implements NameServiceInterface {
 			System.err.println("Erreur: " + e.getMessage());
 		}
 	}
+
+	public void test(String test) {
+		System.out.println("TEST:" + test + " SUCCESS !!!");
+		return;
+	}
+
+	public void signIn() {
+	}
+}
 
 	/*private AuthServerInterface loadServerStub(String hostname) {
 		AuthServerInterface stub = null;
@@ -255,64 +279,6 @@ public class NameService implements NameServiceInterface {
 					if(serverChecksum.equals(clientChecksum)){
 						throw new Exception(filename + " verrouillé");
 					} else {
-						return file.getAbsoluteFile();
-					}
+						return file.getAbsoluteFile(
+							*/
 
-				} else {
-
-					// Si le fichier est deja verrouillé, on cherche dans la Map qui est le client qui possede le fichier
-
-					String lockedUser = lockedFiles.get(filename+".txt");
-					if(lockedUser != null){
-						throw new Exception("Files Server: File already locked by " + lockedUser);
-					} else {
-						throw new Exception("Files Server: Something went wrong");
-					}
-				}
-			} else {
-				throw new RemoteException("Files Server: File Not found");					
-			}
-		} else {
-			throw new RemoteException("AuthServer: " + login + " not signed in");
-		}	
-	}
-
-	public String push(String filename, File newFile, String login, String password) throws RemoteException,IOException, Exception{
-		
-		Path localFile = Paths.get("Server_Files/" + filename + ".txt");		
-		
-		if(authServer.verify(login,password)){
-			File file = new File("Server_Files/" + filename + ".txt");
-			if(file.exists()){
-				if(file.canWrite()){
-					return "opération refusée : vous devez verrouiller d'abord verrouiller le fichier.";
-				}
-				else {
-					String lockedUser = lockedFiles.get(filename+".txt");
-					if(lockedUser != null){
-						if(lockedUser.equals(login)){
-
-							// On relache le fichier
-							
-							file.setWritable(true);
-							InputStream in = new FileInputStream(newFile);							
-							Files.copy(in, localFile, StandardCopyOption.REPLACE_EXISTING);
-
-							return filename + " a été envoyé au serveur";
-						} else {
-							return "opération refusée : " + filename + " est déjà verouillé par " + lockedUser;
-						}
-					} else {
-						return "opération refusée : user not found in lockedUsers structure in Files Server";
-					}
-				}					
-			} else {
-				throw new RemoteException("Files Server: File Not found");				
-			}
-		} else {
-			throw new RemoteException("AuthServer: " + login + " not signed in");
-		}	
-
-	}
-	*/
-}

@@ -12,5 +12,7 @@ public interface NameServiceInterface extends Remote {
 	ArrayList<File> syncLocalDirectory(String login, String pass) throws RemoteException;
 	File get(String filename, String checksum, String login, String password) throws RemoteException,IOException, Exception;
 	File lock(String filename, String checksum, String login, String password) throws RemoteException,IOException, Exception;
-	String push(String filename, File file, String login, String password) throws RemoteException,IOException, Exception;*/	
+	String push(String filename, File file, String login, String password) throws RemoteException,IOException, Exception;*/
+	public void test(String test) throws RemoteException;
+	public void signIn() throws RemoteException;
 }

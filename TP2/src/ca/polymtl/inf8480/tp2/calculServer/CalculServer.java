@@ -2,26 +2,40 @@ package ca.polymtl.inf8480.tp2.calculServer;
 
 import java.rmi.ConnectException;
 import java.rmi.RemoteException;
+import java.rmi.AccessException;
+import java.rmi.NotBoundException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
-
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.net.SocketException;
+import java.net.UnknownHostException;
 import java.util.HashMap;
 import java.util.Map;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileReader;
+import java.io.BufferedReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStream;
+
 import ca.polymtl.inf8480.tp2.shared.CalculServerInterface;
+import ca.polymtl.inf8480.tp2.shared.NameServiceInterface;;
 
 public class CalculServer implements CalculServerInterface {
 
 	// private Map<String, String>  users = new HashMap<String, String>();
 
 	private int capacity = 0;
+	private NameServiceInterface nameServiceInterface = null;
 
     public static void main(String[] args) {
 
 		CalculServer calculServer = new CalculServer();
 		calculServer.run(args);
-
     }
     
     public CalculServer() {
@@ -37,32 +51,34 @@ public class CalculServer implements CalculServerInterface {
 		int port = 0;
 		
 		try{
-			if (args.length >= 1){
-				if(args.length >= 2){	
-					capacity = Integer.parseInt(args[2]);
-					if(args[1].matches("[0-9]+")){
-						if (Integer.parseInt(args[1]) < 5000 || Integer.parseInt(args[1]) > 5050){
-							throw new Exception("Invalid Port. Please enter Port between 5000 and 5050");	
-						} else {
-							port = Integer.parseInt(args[1]);
-						}
-						CalculServerInterface stub = (CalculServerInterface) UnicastRemoteObject
-								.exportObject(this, port);
-						Registry registry = LocateRegistry.createRegistry(port);
-			
-						// Registry registry = LocateRegistry.getRegistry(port);
-						registry.rebind("calculServer", stub);
-						System.out.println("Server ready.");
 
-					} else {
-						throw new Exception("Invalid Port. Please enter Port between 5000 and 5050");
-					}
-				} else {
-					throw new Exception("Missing Capacity");	
-				}
-			} else {
-				throw new Exception("Missing Port and Capacity");	
+			String nameServiceIP = null;
+
+			BufferedReader br = new BufferedReader(new FileReader("config/config_calculServer"));
+			String line;
+    		while ((line = br.readLine()) != null) {
+			   String[] words = line.split(": ");
+			   if(words[0].equals("nameServiceIP")){
+				   nameServiceIP = words[1];
+			   } else if (words[0].equals("capacity")){
+				   capacity = Integer.parseInt(words[1]);
+			   } else if (words[0].equals("port")){
+				   port = Integer.parseInt(words[1]);
+			   }
 			}
+			br.close();
+
+			if (port < 5000 || port > 5050){
+				throw new Exception("Invalid Port. Please enter Port between 5000 and 5050");
+			}
+
+			CalculServerInterface stub = (CalculServerInterface) UnicastRemoteObject
+								.exportObject(this, port);
+			Registry registry = LocateRegistry.createRegistry(port);
+			registry.rebind("calculServer", stub);
+			nameServiceInterface = loadNameServiceStub(nameServiceIP);
+			System.out.println("Server ready.");
+
 		}catch (ConnectException e) {
 			System.err
 					.println("Calcul_Server: Impossible de se connecter au registre RMI. Est-ce que rmiregistry est lancé ?");
@@ -71,10 +87,47 @@ public class CalculServer implements CalculServerInterface {
 		} catch (Exception e) {
 			System.err.println("Erreur: " + e.getMessage());
 		}
+
+		String ip = null;
+
+		try(final DatagramSocket socket = new DatagramSocket()){
+			socket.connect(InetAddress.getByName("8.8.8.8"), 10002);
+			ip = socket.getLocalAddress().getHostAddress();
+		} catch (UnknownHostException e){
+			System.err.println("Erreur: " + e.getMessage());
+		} catch (SocketException e){
+			System.err.println("Erreur: " + e.getMessage());
+		}
+
+		try{
+			nameServiceInterface.test(ip);
+		} catch (RemoteException e){
+			System.err.println("Erreur: " + e.getMessage());
+		}
+
 	}
 
 	public void test(){
 		System.out.println("TEST: SUCCESS");
+	}
+
+	private NameServiceInterface loadNameServiceStub(String nameServiceIP) {
+
+		NameServiceInterface stub = null;
+
+		try {
+			Registry registry = LocateRegistry.getRegistry(nameServiceIP, 5000);
+			stub = (NameServiceInterface) registry.lookup("nameService");
+		} catch (NotBoundException e) {
+			System.out.println("Erreur: Le nom '" + e.getMessage()
+					+ "' n'est pas défini dans le registre.");
+		} catch (AccessException e) {
+			System.out.println("Erreur: " + e.getMessage());
+		} catch (RemoteException e) {
+			System.out.println("Erreur: " + e.getMessage());
+		}
+
+		return stub;
 	}
 
 	/*
