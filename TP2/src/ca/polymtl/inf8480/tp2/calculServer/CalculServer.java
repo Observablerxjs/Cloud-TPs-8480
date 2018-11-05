@@ -7,6 +7,7 @@ import java.rmi.NotBoundException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
+import java.util.Date;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
@@ -33,7 +34,6 @@ public class CalculServer implements CalculServerInterface {
 	private NameServiceInterface nameServiceInterface = null;
 
     public static void main(String[] args) {
-
 		CalculServer calculServer = new CalculServer();
 		calculServer.run(args);
     }
@@ -43,7 +43,6 @@ public class CalculServer implements CalculServerInterface {
 	}
 
 	private void run(String[] args) {
-
 		if (System.getSecurityManager() == null) {
 			System.setSecurityManager(new SecurityManager());
 		}
@@ -58,7 +57,7 @@ public class CalculServer implements CalculServerInterface {
 				final DatagramSocket socket = new DatagramSocket();
 				socket.connect(InetAddress.getByName("8.8.8.8"), 10002);
 				ip = socket.getLocalAddress().getHostAddress();
-
+				System.setProperty("java.rmi.server.hostname",ip);
 				String nameServiceIP = null;
 
 				// TODO: add Malice parameter
@@ -112,8 +111,8 @@ public class CalculServer implements CalculServerInterface {
 
 	}
 
-	public void test(){
-		System.out.println("TEST: SUCCESS");
+	public void test(String test){
+		System.out.println(new Date().getTime()+ " :: " + test);
 	}
 
 	private NameServiceInterface loadNameServiceStub(String nameServiceIP) {

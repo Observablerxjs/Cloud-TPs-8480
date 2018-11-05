@@ -8,6 +8,7 @@ import java.rmi.registry.Registry;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Scanner;
+import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.nio.file.Files;
@@ -48,18 +49,18 @@ public class Repartiteur {
 	private CalculServerInterface calculServer = null;
 	private NameServiceInterface nameService = null;
 
+	private ArrayList<CalculServerInterface> servers = new ArrayList<CalculServerInterface>(); 
+
 	public Repartiteur() {
 		super();
 	}
 
 	// fonction pour charger l'instance du Serveur d'Authentification
-	private CalculServerInterface loadAuthServerStub(String hostname) {
+	private CalculServerInterface loadCalculServer(String hostname,int port) {
 		CalculServerInterface stub = null;
-
 		try {
-			Registry registry = LocateRegistry.getRegistry(5000);
+			Registry registry = LocateRegistry.getRegistry(hostname, port);
 			stub = (CalculServerInterface) registry.lookup("calculServer");
-			stub.test();			
 		} catch (NotBoundException e) {
 			System.out.println("Erreur: Le nom '" + e.getMessage()
 					+ "' n'est pas défini dans le registre.");
@@ -110,18 +111,30 @@ public class Repartiteur {
 			}
 			br.close();
 
-			nameService = loadNameServiceStub(nameServiceIp);
-			ArrayList<CSModel> calculServers = nameService.getCalculServers();
-
-			for (int i = 0; i < calculServers.size(); i++){
-				System.out.println(calculServers.get(i).toString());
-			}
-
 			File file = new File(fileName);
+			double ni = countLinesNew(fileName);
+			System.out.println("number of lines in the file: " + ni);
 			if (file.exists()){
 				System.out.println("File Successfully opened");
 			} else {
 				System.out.println("Error opening the file");
+			}
+
+			nameService = loadNameServiceStub(nameServiceIp);
+			ArrayList<CSModel> calculServers = nameService.getCalculServers();
+
+			// TODO: if modele securise then:
+			for (int i = 0; i < calculServers.size(); i++){
+				calculServer = loadCalculServer(calculServers.get(i).getIpAddr(),calculServers.get(i).getPort());
+				double ci = calculServers.get(i).getCapacity();
+				int T = (int)(((ni-ci)/(4*ci))*100);
+				System.out.println("T = " + T); 
+				servers.add(calculServer);
+			}
+			// TODO: if modele non securisee then:
+
+			for (int i = 0; i < servers.size(); i++){
+				servers.get(i).test("SUCCESS!");
 			}
 
 		} catch (RemoteException e){
@@ -132,6 +145,46 @@ public class Repartiteur {
 			System.err.println("(IOException) Erreur: " + e.getMessage());
 		} catch (Exception e) {
 			System.err.println("Erreur: " + e.getMessage());
+		}
+	}
+
+	// Methode pour compter les lignes du fichier (facon optimal) tire de https://stackoverflow.com/questions/453018/number-of-lines-in-a-file-in-java
+	public static int countLinesNew(String filename) throws IOException {
+		InputStream is = new BufferedInputStream(new FileInputStream(filename));
+		try {
+			byte[] c = new byte[1024];
+
+			int readChars = is.read(c);
+			if (readChars == -1) {
+				// bail out if nothing to read
+				return 0;
+			}
+
+			// make it easy for the optimizer to tune this loop
+			int count = 0;
+			while (readChars == 1024) {
+				for (int i=0; i<1024;) {
+					if (c[i++] == '\n') {
+						++count;
+					}
+				}
+				readChars = is.read(c);
+			}
+
+			// count remaining characters
+			while (readChars != -1) {
+				System.out.println(readChars);
+				for (int i=0; i<readChars; ++i) {
+					if (c[i] == '\n') {
+						++count;
+					}
+				}
+				readChars = is.read(c);
+			}
+
+			return count == 0 ? 1 : count;
+		} finally {
+			is.close();
 		}
 	}
 
