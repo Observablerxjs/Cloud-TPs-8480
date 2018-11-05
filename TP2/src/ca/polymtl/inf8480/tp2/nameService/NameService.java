@@ -10,6 +10,7 @@ import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.FileInputStream;
@@ -20,20 +21,21 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.nio.file.StandardCopyOption;
-
+import java.util.AbstractMap.SimpleEntry;
 import java.io.FileReader;
 import java.io.BufferedReader;
 
-
+import ca.polymtl.inf8480.tp2.shared.*;
 import ca.polymtl.inf8480.tp2.shared.NameServiceInterface;
+import ca.polymtl.inf8480.tp2.calculServer.CalculServer;
+
 // import ca.polymtl.inf8480.tp1.shared.AuthServerInterface;
 
-public class NameService implements NameServiceInterface {
+class NameService implements NameServiceInterface {
 
-	// private AuthServerInterface authServer = null;
-	private Map<String, String>  lockedFiles = new HashMap<String, String>();
-	
+	private ArrayList<CSModel> calculServers = new ArrayList<CSModel>();
 	public static void main(String[] args) {
 		NameService nameService = new NameService();
 		nameService.run();
@@ -41,8 +43,6 @@ public class NameService implements NameServiceInterface {
 
 	public NameService() {
 		super();
-		// On recupere l'instance du serveur d'authentification pour pourvoir verifier la legitimite du client
-		// authServer = loadServerStub("127.0.0.1");
 	}
 
 	private void run() {
@@ -50,14 +50,12 @@ public class NameService implements NameServiceInterface {
 			System.setSecurityManager(new SecurityManager());
 		}
 		try {
-
 			BufferedReader br = new BufferedReader(new FileReader("config/config_nameService"));
 			String line;
     		while ((line = br.readLine()) != null) {
 			   String[] words = line.split(": ");
 			   if(words[0].equals("IPaddress")){
-				   System.out.println(words[1]);
-				System.setProperty("java.rmi.server.hostname",words[1]);
+					System.setProperty("java.rmi.server.hostname",words[1]);
 			   }
 			}
 			br.close();
@@ -66,12 +64,11 @@ public class NameService implements NameServiceInterface {
 			NameServiceInterface stub = (NameServiceInterface) UnicastRemoteObject
 					.exportObject(this, 5000);
 			Registry registry = LocateRegistry.createRegistry(5000);
-			// Registry registry = LocateRegistry.getRegistry(port);
 			registry.rebind("nameService", stub);
 			System.out.println("Server ready.");
+		
 		} catch (ConnectException e) {
-			System.err
-					.println("Name_Service: Impossible de se connecter au registre RMI. Est-ce que rmiregistry est lancé ?");
+			System.err.println("Name_Service: Impossible de se connecter au registre RMI. Est-ce que rmiregistry est lancé ?");
 			System.err.println();
 			System.err.println("Erreur: " + e.getMessage());
 		} catch (Exception e) {
@@ -84,9 +81,21 @@ public class NameService implements NameServiceInterface {
 		return;
 	}
 
-	public void signIn() {
+	public void signIn(String IP, int port, int capacity){
+		for (int i = 0; i < calculServers.size(); i++){
+			if (calculServers.get(i).getIpAddr().equals(IP) && calculServers.get(i).getPort() == port){
+				calculServers.remove(i);
+			}
+		}
+		calculServers.add(new CSModel(IP,port,capacity));
+	}
+
+	public ArrayList<CSModel> getCalculServers(){
+		return calculServers;
 	}
 }
+
+
 
 	/*private AuthServerInterface loadServerStub(String hostname) {
 		AuthServerInterface stub = null;

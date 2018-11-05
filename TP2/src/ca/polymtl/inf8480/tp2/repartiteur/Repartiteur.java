@@ -8,6 +8,7 @@ import java.rmi.registry.Registry;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Scanner;
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,11 +16,13 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 
-
+import ca.polymtl.inf8480.tp2.shared.CSModel;
 import ca.polymtl.inf8480.tp2.shared.CalculServerInterface;
 import ca.polymtl.inf8480.tp2.shared.NameServiceInterface;
 
@@ -43,19 +46,10 @@ public class Repartiteur {
 	}
 
 	private CalculServerInterface calculServer = null;
-	// private NameServiceInterface nameServiceInterface = null;
+	private NameServiceInterface nameService = null;
 
 	public Repartiteur() {
 		super();
-
-		if (System.getSecurityManager() == null) {
-			System.setSecurityManager(new SecurityManager());
-		}
-
-		// On charge nos 2 serveurs en local.
-
-		calculServer = loadAuthServerStub("127.0.0.1");
-		//filesServerStub = loadServerStub("127.0.0.1");
 	}
 
 	// fonction pour charger l'instance du Serveur d'Authentification
@@ -78,12 +72,66 @@ public class Repartiteur {
 		return stub;
 	}
 
+	private NameServiceInterface loadNameServiceStub(String hostname) {
+		NameServiceInterface stub = null;
+
+		try {
+			Registry registry = LocateRegistry.getRegistry(hostname,5000);
+			stub = (NameServiceInterface) registry.lookup("nameService");
+		} catch (NotBoundException e) {
+			System.out.println("Erreur: Le nom '" + e.getMessage()
+					+ "' n'est pas défini dans le registre.");
+		} catch (AccessException e) {
+			System.out.println("Erreur: " + e.getMessage());
+		} catch (RemoteException e) {
+			System.out.println("Erreur: " + e.getMessage());
+		}
+
+		return stub;
+	}
+
 	private void run(String fileName) {
-		File file = new File(fileName);
-		if (file.exists()){
-			System.out.println("File Successfully opened");
-		} else {
-			System.out.println("Error opening the file");
+
+		if (System.getSecurityManager() == null) {
+			System.setSecurityManager(new SecurityManager());
+		}
+
+		String nameServiceIp = null;
+
+		try{
+			
+			BufferedReader br = new BufferedReader(new FileReader("config/config_nameService"));
+			String line;
+    		while ((line = br.readLine()) != null) {
+			   String[] words = line.split(": ");
+			   if(words[0].equals("IPaddress")){
+				   nameServiceIp = words[1];
+			   }
+			}
+			br.close();
+
+			nameService = loadNameServiceStub(nameServiceIp);
+			ArrayList<CSModel> calculServers = nameService.getCalculServers();
+
+			for (int i = 0; i < calculServers.size(); i++){
+				System.out.println(calculServers.get(i).toString());
+			}
+
+			File file = new File(fileName);
+			if (file.exists()){
+				System.out.println("File Successfully opened");
+			} else {
+				System.out.println("Error opening the file");
+			}
+
+		} catch (RemoteException e){
+			System.err.println("(RemoteException) Erreur: " + e.getMessage());
+		} catch (FileNotFoundException e){
+			System.err.println("(FileNotFoundException) Erreur: " + e.getMessage());
+		} catch (IOException e){
+			System.err.println("(IOException) Erreur: " + e.getMessage());
+		} catch (Exception e) {
+			System.err.println("Erreur: " + e.getMessage());
 		}
 	}
 

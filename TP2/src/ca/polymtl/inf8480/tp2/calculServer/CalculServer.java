@@ -48,62 +48,67 @@ public class CalculServer implements CalculServerInterface {
 			System.setSecurityManager(new SecurityManager());
 		}
 
+		String ip = null;
 		int port = 0;
 		
 		try{
 
-			String nameServiceIP = null;
+			if (args.length >= 1){
 
-			BufferedReader br = new BufferedReader(new FileReader("config/config_calculServer"));
-			String line;
-    		while ((line = br.readLine()) != null) {
-			   String[] words = line.split(": ");
-			   if(words[0].equals("nameServiceIP")){
-				   nameServiceIP = words[1];
-			   } else if (words[0].equals("capacity")){
-				   capacity = Integer.parseInt(words[1]);
-			   } else if (words[0].equals("port")){
-				   port = Integer.parseInt(words[1]);
-			   }
+				final DatagramSocket socket = new DatagramSocket();
+				socket.connect(InetAddress.getByName("8.8.8.8"), 10002);
+				ip = socket.getLocalAddress().getHostAddress();
+
+				String nameServiceIP = null;
+
+				// TODO: add Malice parameter
+
+				if(args[0].matches("[0-9]+")){
+					capacity = Integer.parseInt(args[0]); 
+				} else {
+					throw new Exception("Invalid Capacity. Please enter a number > 0");
+				}
+
+				BufferedReader br = new BufferedReader(new FileReader("config/config_calculServer"));
+				String line;
+				while ((line = br.readLine()) != null) {
+				String[] words = line.split(": ");
+				if(words[0].equals("nameServiceIP")){
+					nameServiceIP = words[1];
+				} else if (words[0].equals("port")){
+					port = Integer.parseInt(words[1]);
+				}
+				}
+				br.close();
+
+				if (port < 5000 || port > 5050){
+					throw new Exception("Invalid Port in configFile. Please modify Port between 5000 and 5050 and start again the server");
+				}
+
+				CalculServerInterface stub = (CalculServerInterface) UnicastRemoteObject
+									.exportObject(this, port);
+				Registry registry = LocateRegistry.createRegistry(port);
+				registry.rebind("calculServer", stub);
+				nameServiceInterface = loadNameServiceStub(nameServiceIP);
+				nameServiceInterface.signIn(ip,port,capacity);
+				System.out.println("Server ready.");
+
+			} else {
+				throw new Exception("Missing Capacity value");
 			}
-			br.close();
-
-			if (port < 5000 || port > 5050){
-				throw new Exception("Invalid Port. Please enter Port between 5000 and 5050");
-			}
-
-			CalculServerInterface stub = (CalculServerInterface) UnicastRemoteObject
-								.exportObject(this, port);
-			Registry registry = LocateRegistry.createRegistry(port);
-			registry.rebind("calculServer", stub);
-			nameServiceInterface = loadNameServiceStub(nameServiceIP);
-			System.out.println("Server ready.");
 
 		}catch (ConnectException e) {
 			System.err
 					.println("Calcul_Server: Impossible de se connecter au registre RMI. Est-ce que rmiregistry est lancé ?");
 			System.err.println();
 			System.err.println("Erreur: " + e.getMessage());
+		} catch (UnknownHostException e){
+			System.err.println("(UnknownHostException) Erreur: " + e.getMessage());
+		} catch (SocketException e){
+			System.err.println("(SocketException) Erreur: " + e.getMessage());
 		} catch (Exception e) {
 			System.err.println("Erreur: " + e.getMessage());
-		}
-
-		String ip = null;
-
-		try(final DatagramSocket socket = new DatagramSocket()){
-			socket.connect(InetAddress.getByName("8.8.8.8"), 10002);
-			ip = socket.getLocalAddress().getHostAddress();
-		} catch (UnknownHostException e){
-			System.err.println("Erreur: " + e.getMessage());
-		} catch (SocketException e){
-			System.err.println("Erreur: " + e.getMessage());
-		}
-
-		try{
-			nameServiceInterface.test(ip);
-		} catch (RemoteException e){
-			System.err.println("Erreur: " + e.getMessage());
-		}
+		} 
 
 	}
 
