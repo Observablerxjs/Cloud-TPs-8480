@@ -21,3 +21,54 @@
 
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
+TP1_1733049/client 2/policy
+TP1_1733049/.DS_Store
+TP1_1733049/README.txt
+TP1_1733049/Rapport_1733049.pdf
+TP1_1733049/TP1-Enonce_A2018.pdf
+TP1_1733049/Q1_code/.DS_Store
+TP1_1733049/Q1_code/src/.DS_Store
+TP1_1733049/Q1_code/src/ca/.DS_Store
+TP1_1733049/Q1_code/src/ca/polymtl/.DS_Store
+TP1_1733049/Q1_code/src/ca/polymtl/inf8480/.DS_Store
+TP1_1733049/Q1_code/src/ca/polymtl/inf8480/tp1/.DS_Store
+TP1_1733049/Q1_code/src/ca/polymtl/inf8480/tp1/client/Client.java
+TP1_1733049/Q1_code/src/ca/polymtl/inf8480/tp1/client/FakeServer.java
+TP1_1733049/Q1_code/src/ca/polymtl/inf8480/tp1/server/Server.java
+TP1_1733049/Q1_code/src/ca/polymtl/inf8480/tp1/shared/ServerInterface.java
+TP1_1733049/ResponseTime_Analyzer/.DS_Store
+TP1_1733049/ResponseTime_Analyzer/.classpath
+TP1_1733049/ResponseTime_Analyzer/.project
+TP1_1733049/ResponseTime_Analyzer/.versions
+TP1_1733049/ResponseTime_Analyzer/authservice.sh
+TP1_1733049/ResponseTime_Analyzer/build.xml
+TP1_1733049/ResponseTime_Analyzer/client.sh
+TP1_1733049/ResponseTime_Analyzer/policy
+TP1_1733049/ResponseTime_Analyzer/server.sh
+TP1_1733049/ResponseTime_Analyzer/.externalToolBuilders/TP1 build.xml [Builder].launch
+TP1_1733049/ResponseTime_Analyzer/.settings/org.eclipse.jdt.core.prefs
+TP1_1733049/ResponseTime_Analyzer/src/.DS_Store
+TP1_1733049/ResponseTime_Analyzer/src/.classpath
+TP1_1733049/ResponseTime_Analyzer/src/.project
+TP1_1733049/ResponseTime_Analyzer/src/ca/.DS_Store
+TP1_1733049/ResponseTime_Analyzer/src/ca/polymtl/.DS_Store
+TP1_1733049/ResponseTime_Analyzer/src/ca/polymtl/inf8480/.DS_Store
+TP1_1733049/ResponseTime_Analyzer/src/ca/polymtl/inf8480/tp1/.DS_Store
+TP1_1733049/ResponseTime_Analyzer/src/ca/polymtl/inf8480/tp1/authserver/AuthServer.java
+TP1_1733049/ResponseTime_Analyzer/src/ca/polymtl/inf8480/tp1/client/Client.java
+TP1_1733049/ResponseTime_Analyzer/src/ca/polymtl/inf8480/tp1/server/Server.java
+TP1_1733049/ResponseTime_Analyzer/src/ca/polymtl/inf8480/tp1/shared/AuthServerInterface.java
+TP1_1733049/ResponseTime_Analyzer/src/ca/polymtl/inf8480/tp1/shared/ServerInterface.java
+TP1_1733049/client 2/.DS_Store
+TP1_1733049/client 2/build.xml
+TP1_1733049/client 2/client.sh
+TP1_1733049/client 2/src/.DS_Store
+TP1_1733049/client 2/src/.classpath
+TP1_1733049/client 2/src/.project
+TP1_1733049/client 2/src/ca/.DS_Store
+TP1_1733049/client 2/src/ca/polymtl/.DS_Store
+TP1_1733049/client 2/src/ca/polymtl/inf8480/.DS_Store
+TP1_1733049/client 2/src/ca/polymtl/inf8480/tp1/.DS_Store
+TP1_1733049/client 2/src/ca/polymtl/inf8480/tp1/client/Client.java
+TP1_1733049/client 2/src/ca/polymtl/inf8480/tp1/shared/AuthServerInterface.java
+TP1_1733049/client 2/src/ca/polymtl/inf8480/tp1/shared/ServerInterface.java
