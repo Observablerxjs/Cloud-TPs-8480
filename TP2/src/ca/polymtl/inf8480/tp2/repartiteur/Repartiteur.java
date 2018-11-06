@@ -170,20 +170,22 @@ public class Repartiteur {
 			} else {
 				// if systeme non securisee then:
 
-				Map<RangeIndexModel, Integer> tempResultList = new HashMap<RangeIndexModel, Integer>();
+				Map<Integer, Integer> tempResultList = new HashMap<Integer, Integer>();
 
 				while (j < nOps){
 					for (int i = 0; i < servers.size(); i++){
 						double ci = servers.get(i).getCapacity();
 						Callable<Integer> callable = new MultithreadingDemo(servers.get(i).getStub(), commands , ci ,j);
 						Future<Integer>  value = executor.submit(callable);
-						if (tempResultList.containsKey(new RangeIndexModel(j,(int)(j+ci)))){
-							if (tempResultList.get(new RangeIndexModel(j,(int)(j+ci))) == value.get()){
+						if (tempResultList.containsKey((int)(j+ci))){
+							if (tempResultList.get((int)(j+ci)).compareTo(value.get()) == 0){
 								resultList.add(value);
 								j += ci;
+							} else {
+								tempResultList.clear();
 							}
 						} else {
-							tempResultList.put(new RangeIndexModel(j,(int)(j+ci)), value.get());
+							tempResultList.put((int)(j+ci), value.get());
 						}
 					}
 				}
@@ -262,20 +264,8 @@ public class Repartiteur {
 		}
 		return nOps; 
 	}
-
-
 }
 
-class RangeIndexModel{
-
-	private int startIndex;
-	private int endIndex;
-
-	RangeIndexModel(int startIndex,int endIndex){
-		this.startIndex = startIndex;
-		this.endIndex = endIndex;
-	}
-}
 
 class MultithreadingDemo implements Callable<Integer>
 {
