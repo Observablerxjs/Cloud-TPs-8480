@@ -36,7 +36,7 @@ public class CalculServer implements CalculServerInterface {
 
 	private int capacity = 0;
 	private double malice = 0.0;
-	private NameServiceInterface nameServiceInterface = null;
+	private NameServiceInterface nameService = null;
 
     public static void main(String[] args) {
 		CalculServer calculServer = new CalculServer();
@@ -97,8 +97,8 @@ public class CalculServer implements CalculServerInterface {
 									.exportObject(this, port);
 				Registry registry = LocateRegistry.createRegistry(port);
 				registry.rebind("calculServer", stub);
-				nameServiceInterface = loadNameServiceStub(nameServiceIP);
-				nameServiceInterface.signIn(ip,port,capacity);
+				nameService = loadNameServiceStub(nameServiceIP);
+				nameService.signIn(ip,port,capacity);
 				System.out.println("Server ready.");
 
 			} else {
@@ -120,7 +120,7 @@ public class CalculServer implements CalculServerInterface {
 
 	}
 
-	public Integer execute(ArrayList<Command> commands){
+	public Integer execute(String username, String password, ArrayList<Command> commands){
 		// T sera toujours = 0 car on a choisi d'envoyer uniquement le nombre de commanques que le serveur peut supporter
 		int T = ((commands.size()-capacity)/4*capacity)*100;
 		// System.out.println("ThreadID: " + Thread.currentThread().getId() + " T = " + T);
@@ -162,31 +162,13 @@ public class CalculServer implements CalculServerInterface {
 		} catch (RemoteException e) {
 			System.out.println("Erreur: " + e.getMessage());
 		}
-
 		return stub;
 	}
 
-	/*
-	// Fonction pour enregistrer le client.
-
-	public boolean New(String login, String password) throws RemoteException {
-		if(!users.containsKey(login)){
-			users.put(login,password);
-			return true;		
-		}
-		return false;
-	}
-	
 	// On verifie si le mot de passe du user correspond au username
 
-	public boolean verify(String login, String password) throws RemoteException {
-		String user = users.get(login);
-		if(user != null){
-			return users.get(login).equals(password);
-		} else {
-			return false;
-		}
+	public boolean verify(String username, String password) throws RemoteException {
+		return nameService.verifyUser(username, password);
 	}
-    */
 }
 

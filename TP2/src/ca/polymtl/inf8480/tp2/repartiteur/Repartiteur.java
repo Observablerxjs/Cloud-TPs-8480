@@ -5,37 +5,21 @@ import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
-import java.security.MessageDigest;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Scanner;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.io.BufferedInputStream;
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.concurrent.ThreadPoolExecutor;
-
 
 import ca.polymtl.inf8480.tp2.repartiteur.CalculServersInstances;
 
@@ -46,6 +30,8 @@ import ca.polymtl.inf8480.tp2.shared.NameServiceInterface;
 
 public class Repartiteur {
 
+	String username = null;
+	String password = null;
 	ArrayList<Command> commands = new ArrayList<Command>();
 
 	public static void main(String[] args) {
@@ -140,6 +126,8 @@ public class Repartiteur {
 
 			nameService = loadNameServiceStub(nameServiceIp);
 
+			signInNameService("config/config_repartiteur");
+
 			ArrayList<CSModel> calculServers = nameService.getCalculServers();
 
 			for (int i = 0; i < calculServers.size(); i++){
@@ -160,10 +148,18 @@ public class Repartiteur {
 				while (j < nOps){
 					for (int i = 0; i < servers.size(); i++){
 						double ci = servers.get(i).getCapacity();
-						Callable<Integer> callable = new MultithreadingDemo(servers.get(i).getStub(), commands , ci ,j);
+						Callable<Integer> callable = new MultithreadingDemo(username,password,servers.get(i).getStub(), commands , ci ,j);
 						Future<Integer>  value = executor.submit(callable);
-						resultList.add(value);
-						j += ci;
+						if (value.get() == -1){
+							servers.remove(i);
+							if (servers.size() == 0){
+								throw new Exception("No server running");
+							}
+						}
+						else {
+							resultList.add(value);
+							j += ci;
+						}
 					}
 				}
 
@@ -175,15 +171,18 @@ public class Repartiteur {
 				while (j < nOps){
 					for (int i = 0; i < servers.size(); i++){
 						double ci = servers.get(i).getCapacity();
-						Callable<Integer> callable = new MultithreadingDemo(servers.get(i).getStub(), commands , ci ,j);
+						Callable<Integer> callable = new MultithreadingDemo(username,password,servers.get(i).getStub(), commands , ci ,j);
 						Future<Integer>  value = executor.submit(callable);
-						if (tempResultList.containsKey((int)(j+ci))){
+						if (value.get() == -1){
+							servers.remove(i);
+							if (servers.size() < 2){
+								throw new Exception("Not enough servers to run in unsecure mode: just 1 server still alive ");
+							}
+						} else if (tempResultList.containsKey((int)(j+ci))){
 							if (tempResultList.get((int)(j+ci)).compareTo(value.get()) == 0){
 								resultList.add(value);
 								j += ci;
 							} else {
-								System.out.println("FOUND A MALICIOUS SERVER");
-								System.out.println("previous Result: " + tempResultList.get((int)(j+ci))+ " ; new result: " + (value.get()));
 								tempResultList.clear();
 							}
 						} else {
@@ -201,7 +200,6 @@ public class Repartiteur {
                 {
 					finalResult += future.get();
 					finalResult = finalResult % 4000; 
-                    // System.out.println("Future result is - " + " - " + future.get() + "; And Task done is " + future.isDone());
                 }
                 catch (InterruptedException | ExecutionException e)
                 {
@@ -223,6 +221,32 @@ public class Repartiteur {
 		} catch (Exception e) {
 			System.err.println("Erreur: " + e.getMessage());
 		}
+	}
+
+	public void signInNameService(String fileName) {
+		
+		try{
+			
+			BufferedReader br = new BufferedReader(new FileReader(fileName));
+			String line;
+			while ((line = br.readLine()) != null) {
+				String[] words = line.split(": ");
+				if(words[0].equals("username")){
+					username = words[1];
+				} else if (words[0].equals("password")){
+					password = words[1];
+				}
+			}
+
+			br.close();
+
+			nameService.signInRepartiteur(username, password);
+		
+		} catch (FileNotFoundException e){
+			System.err.println("(FileNotFoundException) Erreur: " + e.getMessage());
+		} catch (IOException e){
+			System.err.println("(IOException) Erreur: " + e.getMessage());
+		} 
 	}
 
 	public String initNameServiceIP() {
@@ -271,13 +295,17 @@ public class Repartiteur {
 
 class MultithreadingDemo implements Callable<Integer>
 {
+	private String username;
+	private String password;
 	private CalculServerInterface stub;
 	private ArrayList<Command> commands;
 	private double capacity;
 	private int index;
 	private Integer result;
 
-	MultithreadingDemo(CalculServerInterface stub, ArrayList<Command> commands, double cap ,int j) {
+	MultithreadingDemo(String username, String password,CalculServerInterface stub, ArrayList<Command> commands, double cap ,int j) {
+		this.username = username;
+		this.password = password;
 		this.stub = stub;
 		this.capacity = cap;
 		this.index = j;
@@ -288,8 +316,14 @@ class MultithreadingDemo implements Callable<Integer>
     public Integer call(){
         try
         {
-			// calcul du Taux de refus ( on a decide d'envoyer a chaque serveur autant d'operations qu'il peut sans surcharger)
-			// T sera donc toujours = 0;
+
+			/* 
+			calcul du Taux de refus ( on a decide d'envoyer a chaque serveur autant d'operations
+			qu'il peut sans le surcharger)
+			C'est donc pour cela qu'on ne verifie pas la valeur de T car on sait qu'elle sera toujours = 0 selon notre
+			implementation 
+			*/
+
 			int T = (int)(((capacity-capacity)/(4*capacity))*100);
 			ArrayList<Command> commandToSend = new ArrayList<Command>();
 			for (int k = index; k < (index + (int)capacity); k++){
@@ -297,7 +331,11 @@ class MultithreadingDemo implements Callable<Integer>
 					commandToSend.add(commands.get(k));
 				}
 			}
-			result = stub.execute(commandToSend);
+			try{
+				result = stub.execute(username, password,commandToSend);
+			} catch (RemoteException e){
+				return -1;
+			}
 		} 
         catch (Exception e) 
         { 
