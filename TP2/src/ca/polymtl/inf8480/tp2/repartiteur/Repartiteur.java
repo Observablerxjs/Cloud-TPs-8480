@@ -40,7 +40,11 @@ public class Repartiteur {
 		boolean unsecureMode = false;
 
 		try{
+
+			// Initialisation des parametres du repartiteur
+
 			if (args.length != 0){
+				// execution en mode securisee si -us est le premier argument en ligne de commande
 				if (args[0].equals("-us") && args.length >= 2){
 					unsecureMode = true;
 					fileName = args[1];
@@ -72,7 +76,7 @@ public class Repartiteur {
 		super();
 	}
 
-	// fonction pour charger l'instance du Serveur d'Authentification
+	// fonction pour charger l'instance du Serveur de calcul
 	private CalculServerInterface loadCalculServer(String hostname,int port) {
 		CalculServerInterface stub = null;
 		try {
@@ -90,6 +94,7 @@ public class Repartiteur {
 		return stub;
 	}
 
+	// fonction pour charger l'instance du Service des noms
 	private NameServiceInterface loadNameServiceStub(String hostname) {
 		NameServiceInterface stub = null;
 
@@ -112,6 +117,7 @@ public class Repartiteur {
 
 		long startTime = System.nanoTime();
 		
+		// Au maximum on fixe un multithreading avec 30 threads
 		ThreadPoolExecutor executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(30);
 
 		if (System.getSecurityManager() == null) {
@@ -120,65 +126,88 @@ public class Repartiteur {
 
 		try{
 
+			// Initialisation des parametres du repartiteur avec les fichiers de config
 			String nameServiceIp = initNameServiceIP();
-
 			int nOps = initCommandsAndNops(fileName);
 
 			nameService = loadNameServiceStub(nameServiceIp);
 
+			// On s'authentifie au niveau du service de noms
 			signInNameService("config/config_repartiteur");
 
+			// On recupere les information des differents serveurs de calcul depuis le service de noms
 			ArrayList<CSModel> calculServers = nameService.getCalculServers();
 
+			// On cree et charge les differents stubs server de calcul en fonction de leur adresse IP et de leur port
 			for (int i = 0; i < calculServers.size(); i++){
-				calculServer = loadCalculServer(calculServers.get(i).getIpAddr(),calculServers.get(i).getPort());					
-				servers.add(new CalculServersInstances(calculServer,calculServers.get(i).getCapacity()));
+				calculServer = loadCalculServer(calculServers.get(i).getIpAddr(),calculServers.get(i).getPort());
+				// On rajoute le stub cree a une liste de servers pour executer les operations				
+				servers.add(new CalculServersInstances(calculServer,calculServers.get(i).getIpAddr(),
+														calculServers.get(i).getPort(),calculServers.get(i).getCapacity()));
 			}
 
-			// Trier les stubs pour communiquer en premier avec le serveur ayant la meilleur capacite
+			// On Trie les stubs pour communiquer en premier avec le serveur ayant la meilleur capacite (optimisation)
 			servers.sort(Collections.reverseOrder(Comparator.comparing(CalculServersInstances::getCapacity)));
 			
 			int j = 0;
 
 			List<Future<Integer>> resultList = new ArrayList<>();
 
-			// if systeme securise then:
+			// si le systeme est en mode securise:
 			if (!unsecureMode){
 
+				// Tant qu'on a pas lu toutes les operations
 				while (j < nOps){
+					// Pour chaque serveur on va creer unn thread et lui communiquer toutes les commandes 
+					// (le thread va se charger de chosir le nombre de commandes a envoyer)
 					for (int i = 0; i < servers.size(); i++){
 						double ci = servers.get(i).getCapacity();
-						Callable<Integer> callable = new MultithreadingDemo(username,password,servers.get(i).getStub(), commands , ci ,j);
+						Callable<Integer> callable = new Operations(username,password,servers.get(i).getStub(), commands , ci ,j);
 						Future<Integer>  value = executor.submit(callable);
+						// Le thread va retourner -1 si le serveur tombe en panne
 						if (value.get() == -1){
+							// Dans le cas ou le seveur tombe en panne, on notifie le service de noms
+							nameService.removeCalculServer(servers.get(i).getIpAddr(), servers.get(i).getPort());
+							// puis on retire le server en question de la liste de server de calcul disponible
 							servers.remove(i);
+							System.out.println("server down: " + servers.size() + " still alive");
 							if (servers.size() == 0){
+								// S'il n'y a plus de serveur disponible on leve une exception
 								throw new Exception("No server running");
 							}
 						}
 						else {
+							// Si le serveur retourne une valeur coherente ( != -1) alors on rajoute le resultat dans une table de resultat
 							resultList.add(value);
+							// On ajoute ensuite a j la capacite du serveur (puisqu'on a choisi d'envoyer au serveur juste ce qu'il peut traiter)
 							j += ci;
 						}
 					}
+
 				}
 
 			} else {
-				// if systeme non securisee then:
-
+				// si le systeme est en mode non securise:
+				// Map pour stocker les donnees comme (index de fin, resultat)
 				Map<Integer, Integer> tempResultList = new HashMap<Integer, Integer>();
 
 				while (j < nOps){
 					for (int i = 0; i < servers.size(); i++){
 						double ci = servers.get(i).getCapacity();
-						Callable<Integer> callable = new MultithreadingDemo(username,password,servers.get(i).getStub(), commands , ci ,j);
+						Callable<Integer> callable = new Operations(username,password,servers.get(i).getStub(), commands , ci ,j);
 						Future<Integer>  value = executor.submit(callable);
 						if (value.get() == -1){
+							nameService.removeCalculServer(servers.get(i).getIpAddr(), servers.get(i).getPort());
 							servers.remove(i);
+							System.out.println("server down: " + servers.size() + " still alive");
 							if (servers.size() < 2){
+								// Difference avec le mode securisee, si le nombre de serveur disponible est plus petit que 2
+								// On leve une exception car le mode non securise ne peut rouler avec un seul server
 								throw new Exception("Not enough servers to run in unsecure mode: just 1 server still alive ");
 							}
 						} else if (tempResultList.containsKey((int)(j+ci))){
+							// Si le resultat qui vient d'etre calcule par un serveur a deja ete calcule par un autre serveur pour le
+							// meme index de fin, on verifie si ces 2 valeurs sont egales 
 							if (tempResultList.get((int)(j+ci)).compareTo(value.get()) == 0){
 								resultList.add(value);
 								j += ci;
@@ -186,6 +215,7 @@ public class Repartiteur {
 								tempResultList.clear();
 							}
 						} else {
+							// si ce n'est pas le cas on rajoute le resultat dans la map tempResultList
 							tempResultList.put((int)(j+ci), value.get());
 						}
 					}
@@ -193,6 +223,7 @@ public class Repartiteur {
 
 			}
 
+			// Caclul du resultat final
 			Integer finalResult = 0;
 
 			for(Future<Integer> future : resultList){
@@ -223,6 +254,7 @@ public class Repartiteur {
 		}
 	}
 
+	// Fonction d'authentification au niveau du service de noms avec les parametres dans le fichier de config du repartiteur
 	public void signInNameService(String fileName) {
 		
 		try{
@@ -249,6 +281,7 @@ public class Repartiteur {
 		} 
 	}
 
+	// Fonction d'initialisation de la variable nameserviceIp avec le fichier de config du nameService
 	public String initNameServiceIP() {
 		String nameServiceIp = null;
 
@@ -272,6 +305,7 @@ public class Repartiteur {
 		return nameServiceIp;
 	}
 
+	// Fonction d'initialisation de la liste des operations et du nombre d'operations
 	public int initCommandsAndNops(String fileName){
 		int nOps = 0;
 		try{
@@ -292,8 +326,8 @@ public class Repartiteur {
 	}
 }
 
-
-class MultithreadingDemo implements Callable<Integer>
+// Class Operations qui va etre envoye dans un thread en multithreading au serveur de calcul specifie
+class Operations implements Callable<Integer>
 {
 	private String username;
 	private String password;
@@ -303,7 +337,7 @@ class MultithreadingDemo implements Callable<Integer>
 	private int index;
 	private Integer result;
 
-	MultithreadingDemo(String username, String password,CalculServerInterface stub, ArrayList<Command> commands, double cap ,int j) {
+	Operations(String username, String password,CalculServerInterface stub, ArrayList<Command> commands, double cap ,int j) {
 		this.username = username;
 		this.password = password;
 		this.stub = stub;
@@ -332,8 +366,10 @@ class MultithreadingDemo implements Callable<Integer>
 				}
 			}
 			try{
+				// execution sur le serveur de calcul
 				result = stub.execute(username, password,commandToSend);
 			} catch (RemoteException e){
+				// si une RemoteException est leve on retourne -1
 				return -1;
 			}
 		} 

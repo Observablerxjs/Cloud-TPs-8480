@@ -13,4 +13,5 @@ public interface NameServiceInterface extends Remote {
 	public void signIn(String IP, int port, int capacity) throws RemoteException;
 	public ArrayList<CSModel> getCalculServers() throws RemoteException;
 	public boolean verifyUser(String username, String password) throws RemoteException;
+	public void removeCalculServer(String IpAddr, int port) throws RemoteException;
 }
