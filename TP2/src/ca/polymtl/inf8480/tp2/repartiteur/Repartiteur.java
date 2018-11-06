@@ -7,7 +7,19 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Scanner;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -22,25 +34,44 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.concurrent.ThreadPoolExecutor;
+
+
+import ca.polymtl.inf8480.tp2.repartiteur.CalculServersInstances;
 
 import ca.polymtl.inf8480.tp2.shared.CSModel;
+import ca.polymtl.inf8480.tp2.shared.Command;
 import ca.polymtl.inf8480.tp2.shared.CalculServerInterface;
 import ca.polymtl.inf8480.tp2.shared.NameServiceInterface;
 
 public class Repartiteur {
 
+	ArrayList<Command> commands = new ArrayList<Command>();
+
 	public static void main(String[] args) {
 
 		String fileName = null;
+		boolean unsecureMode = false;
 
 		try{
 			if (args.length != 0){
-				fileName = args[0];
-				Repartiteur repartiteur = new Repartiteur();
-				repartiteur.run(fileName);
+				if (args[0].equals("-us") && args.length >= 2){
+					unsecureMode = true;
+					fileName = args[1];
+				} else if(args.length >= 1){
+					fileName = args[0];
+				} else {
+					throw new Exception("Missing File Path");	
+				}
 			} else {
 				throw new Exception("Missing File Path");
 			}
+			
+			if (fileName != null){
+				Repartiteur repartiteur = new Repartiteur();
+				repartiteur.run(fileName,unsecureMode);
+			}
+
 		} catch(Exception e){
 			System.out.println(e.getMessage());
 		}
@@ -49,7 +80,7 @@ public class Repartiteur {
 	private CalculServerInterface calculServer = null;
 	private NameServiceInterface nameService = null;
 
-	private ArrayList<CalculServerInterface> servers = new ArrayList<CalculServerInterface>(); 
+	private ArrayList<CalculServersInstances> servers = new ArrayList<CalculServersInstances>(); 
 
 	public Repartiteur() {
 		super();
@@ -91,16 +122,110 @@ public class Repartiteur {
 		return stub;
 	}
 
-	private void run(String fileName) {
+	private void run(String fileName, boolean unsecureMode) {
+
+		long startTime = System.nanoTime();
+		
+		ThreadPoolExecutor executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(30);
 
 		if (System.getSecurityManager() == null) {
 			System.setSecurityManager(new SecurityManager());
 		}
 
+		try{
+
+			String nameServiceIp = initNameServiceIP();
+
+			int nOps = initCommandsAndNops(fileName);
+
+			nameService = loadNameServiceStub(nameServiceIp);
+
+			ArrayList<CSModel> calculServers = nameService.getCalculServers();
+
+			for (int i = 0; i < calculServers.size(); i++){
+				calculServer = loadCalculServer(calculServers.get(i).getIpAddr(),calculServers.get(i).getPort());					
+				servers.add(new CalculServersInstances(calculServer,calculServers.get(i).getCapacity()));
+			}
+
+			// Trier les stubs pour communiquer en premier avec le serveur ayant la meilleur capacite
+			servers.sort(Collections.reverseOrder(Comparator.comparing(CalculServersInstances::getCapacity)));
+			
+			int j = 0;
+
+			List<Future<Integer>> resultList = new ArrayList<>();
+
+			// if systeme securise then:
+			if (!unsecureMode){
+
+				while (j < nOps){
+					for (int i = 0; i < servers.size(); i++){
+						double ci = servers.get(i).getCapacity();
+						Callable<Integer> callable = new MultithreadingDemo(servers.get(i).getStub(), commands , ci ,j);
+						Future<Integer>  value = executor.submit(callable);
+						resultList.add(value);
+						j += ci;
+					}
+				}
+
+			} else {
+				// if systeme non securisee then:
+
+				Map<RangeIndexModel, Integer> tempResultList = new HashMap<RangeIndexModel, Integer>();
+
+				while (j < nOps){
+					for (int i = 0; i < servers.size(); i++){
+						double ci = servers.get(i).getCapacity();
+						Callable<Integer> callable = new MultithreadingDemo(servers.get(i).getStub(), commands , ci ,j);
+						Future<Integer>  value = executor.submit(callable);
+						if (tempResultList.containsKey(new RangeIndexModel(j,(int)(j+ci)))){
+							if (tempResultList.get(new RangeIndexModel(j,(int)(j+ci))) == value.get()){
+								resultList.add(value);
+								j += ci;
+							}
+						} else {
+							tempResultList.put(new RangeIndexModel(j,(int)(j+ci)), value.get());
+						}
+					}
+				}
+
+			}
+
+			Integer finalResult = 0;
+
+			for(Future<Integer> future : resultList){
+				try
+                {
+					finalResult += future.get();
+					finalResult = finalResult % 4000; 
+                    // System.out.println("Future result is - " + " - " + future.get() + "; And Task done is " + future.isDone());
+                }
+                catch (InterruptedException | ExecutionException e)
+                {
+                    e.printStackTrace();
+                }
+			}
+			
+			System.out.println("Final Result: " + finalResult);
+
+			executor.shutdown();
+
+			long endTime = System.nanoTime();
+		
+			long duration = (endTime - startTime);
+			System.out.println("Execution Time: " + duration);
+
+		} catch (RemoteException e){
+			System.err.println("(RemoteException) Erreur: " + e.getMessage());
+		} catch (Exception e) {
+			System.err.println("Erreur: " + e.getMessage());
+		}
+	}
+
+	public String initNameServiceIP() {
 		String nameServiceIp = null;
 
 		try{
-			
+
 			BufferedReader br = new BufferedReader(new FileReader("config/config_nameService"));
 			String line;
     		while ((line = br.readLine()) != null) {
@@ -110,303 +235,87 @@ public class Repartiteur {
 			   }
 			}
 			br.close();
-
-			File file = new File(fileName);
-			double ni = countLinesNew(fileName);
-			System.out.println("number of lines in the file: " + ni);
-			if (file.exists()){
-				System.out.println("File Successfully opened");
-			} else {
-				System.out.println("Error opening the file");
-			}
-
-			nameService = loadNameServiceStub(nameServiceIp);
-			ArrayList<CSModel> calculServers = nameService.getCalculServers();
-
-			// TODO: if modele securise then:
-			for (int i = 0; i < calculServers.size(); i++){
-				calculServer = loadCalculServer(calculServers.get(i).getIpAddr(),calculServers.get(i).getPort());
-				double ci = calculServers.get(i).getCapacity();
-				int T = (int)(((ni-ci)/(4*ci))*100);
-				System.out.println("T = " + T); 
-				servers.add(calculServer);
-			}
-			// TODO: if modele non securisee then:
-
-			for (int i = 0; i < servers.size(); i++){
-				servers.get(i).test("SUCCESS!");
-			}
-
-		} catch (RemoteException e){
-			System.err.println("(RemoteException) Erreur: " + e.getMessage());
+		
 		} catch (FileNotFoundException e){
 			System.err.println("(FileNotFoundException) Erreur: " + e.getMessage());
 		} catch (IOException e){
 			System.err.println("(IOException) Erreur: " + e.getMessage());
-		} catch (Exception e) {
-			System.err.println("Erreur: " + e.getMessage());
+		} 
+		return nameServiceIp;
+	}
+
+	public int initCommandsAndNops(String fileName){
+		int nOps = 0;
+		try{
+			BufferedReader br = new BufferedReader(new FileReader(fileName));
+			String line;
+			while ((line = br.readLine()) != null) {
+				String[] words = line.split(" ");
+				commands.add(new Command(words[0],Integer.parseInt(words[1])));
+				nOps++;
+			}
+			br.close();
+		} catch (FileNotFoundException e){
+			System.err.println("(FileNotFoundException) Erreur: " + e.getMessage());
+		} catch (IOException e){
+			System.err.println("(IOException) Erreur: " + e.getMessage());
 		}
-	}
-
-	// Methode pour compter les lignes du fichier (facon optimal) tire de https://stackoverflow.com/questions/453018/number-of-lines-in-a-file-in-java
-	public static int countLinesNew(String filename) throws IOException {
-		InputStream is = new BufferedInputStream(new FileInputStream(filename));
-		try {
-			byte[] c = new byte[1024];
-
-			int readChars = is.read(c);
-			if (readChars == -1) {
-				// bail out if nothing to read
-				return 0;
-			}
-
-			// make it easy for the optimizer to tune this loop
-			int count = 0;
-			while (readChars == 1024) {
-				for (int i=0; i<1024;) {
-					if (c[i++] == '\n') {
-						++count;
-					}
-				}
-				readChars = is.read(c);
-			}
-
-			// count remaining characters
-			while (readChars != -1) {
-				System.out.println(readChars);
-				for (int i=0; i<readChars; ++i) {
-					if (c[i] == '\n') {
-						++count;
-					}
-				}
-				readChars = is.read(c);
-			}
-
-			return count == 0 ? 1 : count;
-		} finally {
-			is.close();
-		}
+		return nOps; 
 	}
 
 
-/*
-	private void signIn(String login,String password) throws IOException{
-		
-		if(authServer.New(login,password)){
-			File dir = new File("Client_Files");
-			if(!dir.exists()){
-				dir.mkdir();
-			}
-
-			//On cree le fichier credentials pour pouvoir reutiliser le username et le password lors des appels RMI
-
-			File file = new File("Client_Files/credentials.txt");
-			BufferedWriter writer = new BufferedWriter(new FileWriter(file));
-			String credentials = login + " " + password;
-			writer.write(credentials);
-			writer.close();
-			System.out.println("AuthServer : " + login + " signed in succesfully");				
-		} else {
-			System.out.println("AuthServer : Username already taken, please choose another one");			
-		}
-
-	}
-
-	private void createFile(String filename) throws IOException, Exception{
-
-		/*On verifie avant chaque appel si le fichier credentials existe 
-
-		File file = new File("Client_Files/credentials.txt");
-		if(file.exists()){
-			ArrayList<String> credentials = new ArrayList<String>();
-			Scanner input = new Scanner(file); 
-			while (input.hasNext()) {
-				String word  = input.next();
-				credentials.add(word);
-			}
-			input.close();
-			String login = credentials.get(0);
-			String password = credentials.get(1);
-			try{
-				if(filesServerStub.create(filename,login,password)){
-					System.out.println(filename + " ajouté");	
-				} else {
-					System.out.println(filename + " existe déjà");					
-				}
-			} catch (RemoteException e){
-				System.out.println(e);
-			} catch (Exception e) {
-				System.out.println(e);
-			}
-		} else {
-			System.out.println("Credentials file not found: make sure you signed in before");
-		}
-	}
-
-	private void listFiles() throws IOException{
-		ArrayList<String> credentials = getCredentials();
-		if(credentials.size() > 0){			
-			String login = credentials.get(0);
-			String password = credentials.get(1);
-			ArrayList<String> files = new ArrayList<String>();
-
-			/*Appel RMI de la fonction list qui va nous retourner une liste de tout les fichiers presents
-			sur le serveur.
-			files = filesServerStub.list(login,password);
-			for (String element : files){
-				System.out.println(element);
-			}
-		}
-	}
-
-	// Fonction qui va recuperer le nom d'utilisateur et le mot de passe de l'utilisateur
-	private ArrayList<String> getCredentials() throws IOException{
-		File file = new File("Client_Files/credentials.txt");
-		ArrayList<String> credentials = new ArrayList<String>();		
-		if(file.exists()){
-			Scanner input = new Scanner(file); 
-			// On parcours le fichier credentials et connaisant son format on stocke les valeurs dans un tableau de String
-			while (input.hasNext()) {
-				String word  = input.next();
-				credentials.add(word);
-			}
-			input.close();
-		} else {
-			System.out.println("Credentials file not found: make sure you signed in before");
-		}
-		return credentials;
-	}
-
-	private void syncLocalDirectory() throws IOException {
-
-		ArrayList<String> credentials = getCredentials();
-		if(credentials.size() > 0){
-			String login = credentials.get(0);
-			String password = credentials.get(1);
-			ArrayList<File> files= filesServerStub.syncLocalDirectory(login,password);
-			for (File element : files){
-
-				// Pour chaque fichier retourné on ecrase le fichier s'il existait deja en local sinon on le cree
-
-				Path localFile = Paths.get("Client_Files/" + element.getName() + ".txt");		
-				InputStream in = new FileInputStream(element);							
-				Files.copy(in, localFile, StandardCopyOption.REPLACE_EXISTING);
-
-			}
-		}
-	}
-
-	// Fonction qui retourne la valeur du checksum MD5
-	private String getMD5Checksum(File file) throws IOException, Exception{
-
-		String checksum = "";		
-
-		InputStream fis = new FileInputStream(file);				
-		MessageDigest md = MessageDigest.getInstance("MD5");
-		byte[] buffer = new byte[1024];
-		int numRead;				
-
-		do {
-			numRead = fis.read(buffer);
-			if (numRead > 0) {
-				md.update(buffer, 0, numRead);
-			}
-		} while (numRead != -1);
-		fis.close();
-
-		byte[] digest = md.digest();
-		for (int i=0; i < digest.length; i++) {
-			checksum += Integer.toString( ( digest[i] & 0xff ) + 0x100, 16).substring( 1 );
-		}
-
-		return checksum;
-	}
-
-	private void lock(String filename) throws IOException, Exception {
-		Path localFile = Paths.get("Client_Files/" + filename + ".txt");		
-		ArrayList<String> credentials = getCredentials();
-		if(credentials.size() > 0){
-			String login = credentials.get(0);
-			String password = credentials.get(1);
-			File file = new File("Client_Files/" + filename + ".txt");
-			
-			// Calcul du checksum			
-			String checksum = getMD5Checksum(file);
-
-			try {
-				File newFile = filesServerStub.lock(filename,checksum,login,password);	
-				InputStream in = new FileInputStream(newFile);							
-				Files.copy(in, localFile, StandardCopyOption.REPLACE_EXISTING);
-				System.out.println(filename + " verrouillé");
-			} catch (Exception e){
-				System.out.println(e.getMessage());
-			}
-			
-		}
-				
-	}
-
-	private void get(String filename) throws IOException,Exception {
-		
-		Path localFile = Paths.get("Client_Files/" + filename + ".txt");		
-		ArrayList<String> credentials = getCredentials();
-
-		if(credentials.size() > 0){
-			
-			String login = credentials.get(0);
-			String password = credentials.get(1);
-			File file = new File("Client_Files/" + filename + ".txt");
-			String checksum = "";			
-			
-			if(file.exists()){
-				// Calcul du checksum
-				checksum = getMD5Checksum(file);
-			}
-
-			try {
-				File newFile = filesServerStub.get(filename,checksum,login,password);
-				InputStream in = new FileInputStream(newFile);							
-				Files.copy(in, localFile, StandardCopyOption.REPLACE_EXISTING);
-				System.out.println(filename + " synchronisé");
-			} catch (Exception e){
-				System.out.println(filename + " already up to date");
-			}
-
-		}
-	}
-
-	private void push(String filename) throws IOException,Exception {
-
-		ArrayList<String> credentials = getCredentials();
-		if(credentials.size() > 0){
-			String login = credentials.get(0);
-			String password = credentials.get(1);
-			File file = new File("Client_Files/" + filename + ".txt");
-			if(!file.exists()){
-				System.out.println(filename + " Not found.");
-			} else {
-				System.out.println(filesServerStub.push(filename,file.getAbsoluteFile(),login,password));
-			}
-		}			
-	}
-
-	// fonction pour charger l'instance du Serveur de fichiers
-	private ServerInterface loadServerStub(String hostname) {
-		ServerInterface stub = null;
-
-		try {
-			Registry registry = LocateRegistry.getRegistry(hostname);
-			stub = (ServerInterface) registry.lookup("server");
-		} catch (NotBoundException e) {
-			System.out.println("Erreur: Le nom '" + e.getMessage()
-					+ "' n'est pas défini dans le registre.");
-		} catch (AccessException e) {
-			System.out.println("Erreur: " + e.getMessage());
-		} catch (RemoteException e) {
-			System.out.println("Erreur: " + e.getMessage());
-		}
-
-		return stub;
-	}
-	*/
 }
+
+class RangeIndexModel{
+
+	private int startIndex;
+	private int endIndex;
+
+	RangeIndexModel(int startIndex,int endIndex){
+		this.startIndex = startIndex;
+		this.endIndex = endIndex;
+	}
+}
+
+class MultithreadingDemo implements Callable<Integer>
+{
+	private CalculServerInterface stub;
+	private ArrayList<Command> commands;
+	private double capacity;
+	private int index;
+	private Integer result;
+
+	MultithreadingDemo(CalculServerInterface stub, ArrayList<Command> commands, double cap ,int j) {
+		this.stub = stub;
+		this.capacity = cap;
+		this.index = j;
+		this.commands = commands;
+	}
+
+	@Override
+    public Integer call(){
+        try
+        {
+			// calcul du Taux de refus ( on a decide d'envoyer a chaque serveur autant d'operations qu'il peut sans surcharger)
+			// T sera donc toujours = 0;
+			int T = (int)(((capacity-capacity)/(4*capacity))*100);
+			ArrayList<Command> commandToSend = new ArrayList<Command>();
+			for (int k = index; k < (index + (int)capacity); k++){
+				if( k < commands.size()){
+					commandToSend.add(commands.get(k));
+				}
+			}
+			result = stub.execute(commandToSend);
+		} 
+        catch (Exception e) 
+        { 
+            // Throwing an exception 
+            System.out.println ("Exception is caught"); 
+		} 
+		return result;
+    }
+
+	public int getResult(){
+		return result;
+	}
+} 

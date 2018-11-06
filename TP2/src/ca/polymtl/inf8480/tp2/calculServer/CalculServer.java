@@ -7,6 +7,7 @@ import java.rmi.NotBoundException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
+import java.util.ArrayList;
 import java.util.Date;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
@@ -24,13 +25,16 @@ import java.io.IOException;
 import java.io.InputStream;
 
 import ca.polymtl.inf8480.tp2.shared.CalculServerInterface;
-import ca.polymtl.inf8480.tp2.shared.NameServiceInterface;;
+import ca.polymtl.inf8480.tp2.shared.NameServiceInterface;
+import ca.polymtl.inf8480.tp2.shared.Command;
+import ca.polymtl.inf8480.tp2.calculServer.Operations;
 
 public class CalculServer implements CalculServerInterface {
 
 	// private Map<String, String>  users = new HashMap<String, String>();
 
 	private int capacity = 0;
+	private int malice = 0;
 	private NameServiceInterface nameServiceInterface = null;
 
     public static void main(String[] args) {
@@ -111,8 +115,21 @@ public class CalculServer implements CalculServerInterface {
 
 	}
 
-	public void test(String test){
-		System.out.println(new Date().getTime()+ " :: " + test);
+	public Integer execute(ArrayList<Command> commands){
+		// T sera toujours = 0 car on a choisi d'envoyer uniquement le nombre de commanques que le serveur peut supporter
+		int T = ((commands.size()-capacity)/4*capacity)*100;
+		System.out.println("ThreadID: " + Thread.currentThread().getId() + " T = " + T);
+		int result = 0;
+		for (int i = 0; i < commands.size(); i++){
+			String operand = commands.get(i).getOperand();
+			if (operand.equals("pell")){
+				result += Operations.pell(commands.get(i).getValue());
+			} else if(operand.equals("prime")){
+				result += Operations.prime(commands.get(i).getValue());
+			}
+			result = result % 4000;
+		}
+		return result;
 	}
 
 	private NameServiceInterface loadNameServiceStub(String nameServiceIP) {
@@ -157,3 +174,4 @@ public class CalculServer implements CalculServerInterface {
 	}
     */
 }
+
