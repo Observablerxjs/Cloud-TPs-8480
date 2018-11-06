@@ -23,6 +23,7 @@ import java.io.BufferedReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Random;
 
 import ca.polymtl.inf8480.tp2.shared.CalculServerInterface;
 import ca.polymtl.inf8480.tp2.shared.NameServiceInterface;
@@ -34,7 +35,7 @@ public class CalculServer implements CalculServerInterface {
 	// private Map<String, String>  users = new HashMap<String, String>();
 
 	private int capacity = 0;
-	private int malice = 0;
+	private double malice = 0.0;
 	private NameServiceInterface nameServiceInterface = null;
 
     public static void main(String[] args) {
@@ -57,6 +58,10 @@ public class CalculServer implements CalculServerInterface {
 		try{
 
 			if (args.length >= 1){
+				if (args.length >=2){
+					malice = (Integer.parseInt(args[1])/100.0);
+					System.out.println("malice = " + malice);
+				}
 
 				final DatagramSocket socket = new DatagramSocket();
 				socket.connect(InetAddress.getByName("8.8.8.8"), 10002);
@@ -118,7 +123,7 @@ public class CalculServer implements CalculServerInterface {
 	public Integer execute(ArrayList<Command> commands){
 		// T sera toujours = 0 car on a choisi d'envoyer uniquement le nombre de commanques que le serveur peut supporter
 		int T = ((commands.size()-capacity)/4*capacity)*100;
-		System.out.println("ThreadID: " + Thread.currentThread().getId() + " T = " + T);
+		// System.out.println("ThreadID: " + Thread.currentThread().getId() + " T = " + T);
 		int result = 0;
 		for (int i = 0; i < commands.size(); i++){
 			String operand = commands.get(i).getOperand();
@@ -129,6 +134,16 @@ public class CalculServer implements CalculServerInterface {
 			}
 			result = result % 4000;
 		}
+
+		if (malice != 0){
+			Random rand = new Random();
+			double  n = rand.nextDouble();
+			System.out.println("random: " + n);
+			if (n <= malice){
+				result += 15;
+			}
+		}
+
 		return result;
 	}
 

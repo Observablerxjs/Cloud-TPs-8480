@@ -182,6 +182,8 @@ public class Repartiteur {
 								resultList.add(value);
 								j += ci;
 							} else {
+								System.out.println("FOUND A MALICIOUS SERVER");
+								System.out.println("previous Result: " + tempResultList.get((int)(j+ci))+ " ; new result: " + (value.get()));
 								tempResultList.clear();
 							}
 						} else {
