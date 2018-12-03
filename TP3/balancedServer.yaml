@@ -61,7 +61,7 @@ resources:
 outputs:
   server_ip:
     description: The networks of the deployed server
-    value: { get_attr: [server, networks] }
+    value: { get_attr: [server, first_address] }
   lb_member:
     description: LB member details
     value: { get_attr: [member, show]}
