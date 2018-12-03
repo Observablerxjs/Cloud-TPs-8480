@@ -1,0 +1,67 @@
+heat_template_version: 2013-05-23
+description: Simple template to deploy a single compute instance with parameters
+
+parameters:
+  name:
+    type: string
+    description: server Name
+  key_name:
+    type: string
+    label: Key Name
+    default: INF8480-TP3
+    description: Name of key-pair to be used for compute instance
+  image_id:
+    type: string
+    label: Image ID
+    description: Image to be used for compute instance
+    default: INF4410-Ubuntu-trusty-mini
+    constraints:
+      - custom_constraint: glance.image
+  flavor:
+    type: string
+    description: Flavor utilisee par les serveurs
+    default: INF4410-mini
+    constraints:
+      - custom_constraint: nova.flavor
+  pool_id:
+    type: string
+  user_data:
+    type: string
+    description: boot_script
+  network_id:
+    type: string
+    label: Network ID
+    description: SCONETWORK Network to be used for the compute instance
+    default: inf4410-net
+    constraints:
+      - custom_constraint: neutron.network
+
+resources:
+
+  my_instance:
+    type: OS::Nova::Server
+    properties:
+      name: { get_param: name }
+      key_name: { get_param: key_name }
+      image: { get_param: image_id }
+      flavor: { get_param: flavor }
+      networks:
+          - network: { get_param: network_id }
+      user_data_format: RAW
+      user_data: { get_param: user_data }
+      metadata: {"metering.stack": { get_param: "OS::stack_id"} }
+
+  member:
+    type: OS::Neutron::PoolMember
+    properties:
+      pool_id: {get_param: pool_id}
+      address: {get_attr: { server, first_address} }
+      protocol_port: 8080
+
+outputs:
+  server_ip:
+    description: The networks of the deployed server
+    value: { get_attr: [server, networks] }
+  lb_member:
+    description: LB member details
+    value: { get_attr: [member, show]}
