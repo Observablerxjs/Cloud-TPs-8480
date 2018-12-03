@@ -2,9 +2,6 @@ heat_template_version: 2013-05-23
 description: Simple template to deploy a single compute instance with parameters
 
 parameters:
-  name:
-    type: string
-    description: server Name
   key_name:
     type: string
     label: Key Name
@@ -17,22 +14,24 @@ parameters:
     default: INF4410-Ubuntu-trusty-mini
     constraints:
       - custom_constraint: glance.image
-  flavor:
+  instance_type:
     type: string
-    description: Flavor utilisee par les serveurs
+    label: Instance Type
+    description: Type of instance (flavor) to be used
     default: INF4410-mini
     constraints:
       - custom_constraint: nova.flavor
-  pool_id:
-    type: string
-  user_data:
-    type: string
-    description: boot_script
   network_id:
     type: string
     label: Network ID
     description: SCONETWORK Network to be used for the compute instance
     default: inf4410-net
+    constraints:
+      - custom_constraint: neutron.network
+  external_network_id:
+    type: string
+    default: 0c3b1354-d3d5-4fec-86d3-19d4d1f13785
+    description: UUID of a Neutron external network
     constraints:
       - custom_constraint: neutron.network
 
@@ -41,27 +40,34 @@ resources:
   my_instance:
     type: OS::Nova::Server
     properties:
-      name: { get_param: name }
+      name: server_TP3_1
       key_name: { get_param: key_name }
       image: { get_param: image_id }
-      flavor: { get_param: flavor }
+      flavor: { get_param: instance_type }
       networks:
-        - network: { get_param: network_id }
+          - network: { get_param: network_id }
       user_data_format: RAW
-      user_data: { get_param: user_data }
-      metadata: {"metering.stack": { get_param: "OS::stack_id"} }
+      user_data:
+        str_replace:
+          template: |
+            #!/bin/bash
+            wget "https://raw.githubusercontent.com/houssemmh/INF4410-TP3/master/server.py"
+            python server.py
+          params:
+            $db_name: database
 
-  member:
-    type: OS::Neutron::PoolMember
+  server_floating_ip_assoc:
+    type: OS::Nova::FloatingIPAssociation
     properties:
-      pool_id: {get_param: pool_id}
-      address: {get_attr: [ my_instance, first_address ] }
-      protocol_port: 8080
+      floating_ip: {get_resource: ip_float}
+      server_id: {get_resource: my_instance}
+
+  ip_float:
+    type: OS::Neutron::FloatingIP
+    properties:
+      floating_network_id: {get_param: external_network_id}
 
 outputs:
-  server_ip:
+  server_networks:
     description: The networks of the deployed server
-    value: { get_attr: [my_instance, first_address] }
-  lb_member:
-    description: LB member details
-    value: { get_attr: [member, show]}
+    value: { get_attr: [my_instance, networks] }
