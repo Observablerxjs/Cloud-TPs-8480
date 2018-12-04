@@ -70,14 +70,10 @@ resources:
               key_name: { get_param: key_name }
               network_id: { get_param: network_id }
               pool_id: { get_resource: mypool }
-              user_data:
-                str_replace:
-                  template: |
-                    #!/bin/bash
-                    wget "https://raw.githubusercontent.com/houssemmh/INF4410-TP3/master/server.py"
-                    python server.py
-                  params:
-                    $db_name: database
+              user_data: |
+                #!/bin/bash
+                wget "https://raw.githubusercontent.com/houssemmh/INF4410-TP3/master/server.py"
+                python server.py
 
   mymonitor:
       type: OS::Neutron::HealthMonitor
